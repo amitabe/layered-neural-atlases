@@ -146,24 +146,26 @@ def get_mapping_area(model_F_mapping, F_alpha, mask_frames, resx, number_of_fram
     relis_i, relis_j, relis_f = torch.where(mask_frames)
 
     # split all i,j,f coordinates to batches of size 100k
-    relisa = np.array_split(relis_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
-    reljsa = np.array_split(relis_j.numpy(), np.ceil(relis_i.shape[0] / 100000))
-    relfsa = np.array_split(relis_f.numpy(), np.ceil(relis_i.shape[0] / 100000))
+    splits = int(np.ceil(relis_i.shape[0] / 100000))
+    if splits > 0:
+        relisa = np.array_split(relis_i.numpy(), splits)
+        reljsa = np.array_split(relis_j.numpy(), splits)
+        relfsa = np.array_split(relis_f.numpy(), splits)
 
     minx = 1
     miny = 1
     maxx = -1
     maxy = -1
     with torch.no_grad():
-        for i in range(len(relisa)):
+        for i in range(splits):
             relis = torch.from_numpy(relisa[i]).unsqueeze(1) / (resx / 2) - 1
             reljs = torch.from_numpy(reljsa[i]).unsqueeze(1) / (resx / 2) - 1
             relfs = torch.from_numpy(relfsa[i]).unsqueeze(1) / (number_of_frames / 2) - 1
 
             uv = model_F_mapping(torch.cat((reljs, relis, relfs),
-                                           dim=1).to(device)).cpu()
+                                        dim=1).to(device)).cpu()
             alpha = F_alpha(torch.cat((reljs, relis, relfs),
-                                      dim=1).to(device)).cpu().squeeze()
+                                    dim=1).to(device)).cpu().squeeze()
             if invert_alpha:
                 alpha = -alpha
             if torch.any(alpha > alpha_thresh):
@@ -294,8 +296,10 @@ def evaluate_model(model_F_atlas, resx, resy, number_of_frames, model_F_mapping1
             relis_i, reljs_i = torch.where(torch.ones(resy, resx) > 0)
 
             # split the coordinates of the entire image such that no more than 100k coordinates in each batch
-            relisa = np.array_split(relis_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
-            reljsa = np.array_split(reljs_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
+            splits = int(np.ceil(relis_i.shape[0] / 100000))
+            if splits > 0:
+                relisa = np.array_split(relis_i.numpy(), splits)
+                reljsa = np.array_split(reljs_i.numpy(), splits)
 
             m1_alpha_v = []
             m1_alpha_u = []
@@ -305,7 +309,7 @@ def evaluate_model(model_F_atlas, resx, resy, number_of_frames, model_F_mapping1
             m2_alpha_u = []
             m2_alpha_alpha = []
 
-            for i in range(len(relisa)):
+            for i in range(splits):
                 relis = torch.from_numpy(relisa[i]).unsqueeze(1) / (larger_dim / 2) - 1
                 reljs = torch.from_numpy(reljsa[i]).unsqueeze(1) / (larger_dim / 2) - 1
                 # Map video indices to uv coordinates using the two mapping networks:
